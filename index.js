@@ -1,4 +1,4 @@
-// [[0,0,0],[1,0,1],[0,0,0]] => 000101000
+
 
 const STATES = {
   X_TURN: 0,
@@ -29,10 +29,6 @@ const ROW_TO_CORNER = {
   [ROW_MOVES[3] | ROW_MOVES[1]]: CORNER_MOVES[2],
   [ROW_MOVES[3] | ROW_MOVES[2]]: CORNER_MOVES[3],
 };
-
-// 2 bits per state
-// 9 bits per X player
-// 9bits per O player
 
 const BASE_STATE = 0b111111111;
 
@@ -71,16 +67,19 @@ class Message {
   }
 }
 
+// [[0,0,0],[1,0,1],[0,0,0]] => 000101000
+
+// 3 bits per state
+// 9 bits per O player
+// 9 bits per X player
+
 class State {
   constructor() {
     this.value = 0;
   }
 
   setGameState(state) {
-    //console.log(applyValueWithBitMask(this.value, state << 18, 0b11 << 18));
     this.value = applyValueWithBitMask(this.value, state << 18, 0b111 << 18);
-    // (this.value & (0b11 << 18)).toString(2));
-    //console.log(this.getGameState());
   }
 
   getGameState() {
@@ -184,16 +183,12 @@ const isDraw = (state) =>
   (!getWinningMoves(state.getOPlayer(), state.getXPlayer()).length &&
     !getWinningMoves(state.getXPlayer(), state.getOPlayer()).length);
 
-//const logMove = ({ diff, win }) =>
-// console.log(`WIN: ${to2(win)}; DIFF: ${to2(diff)}`);
-
 const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
   let maxWinDiff = -Infinity,
     maxEnemyDiff = -Infinity,
     minEnemyLens = Infinity,
     res = null;
 
-  // console.log("PPPP", moves);
   for (let i = 0; i < moves.length; i++) {
     const move = moves[i];
     const winDiff = winDiffs.reduce(
@@ -314,9 +309,8 @@ const makeMove = (state) => {
     );
     const allEnemyMoves = reduceBitArray(filteredEnemyMoves);
     const allWinningMoves = reduceBitArray(filteredWinningMoves);
-    // console.log(winningMoves, allWinningMoves);
-    // console.log(filteredEnemyMoves, filteredEnemyMoves);
-    let b = 0b100000000;
+
+    let b = 0x100;
     while (b) {
       if ((boardState & b) === 0) {
         const notEnemyWin = (allEnemyMoves & b) === 0;
@@ -437,11 +431,6 @@ class Game {
 }
 
 window.onload = () => {
-  /*for (let i = 10; i > -1; i--) {
-        const game = new Game([0, 1]);
-        game.appendTo(document.body);
-        game.start();
-      }*/
   const messages = [
     "Always loses to player.",
     "Most of times loses to player.",
