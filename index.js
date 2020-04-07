@@ -83,7 +83,6 @@ class State {
   }
 
   getGameState() {
-    //console.log((this.value & (0b11 << 18)).toString(2));
     return (this.value & (0b111 << 18)) >> 18;
   }
 
@@ -246,26 +245,18 @@ const makeMove = (state) => {
     .map(({ diff }) => diff)
     .filter((diff) => getBitCount(diff) < 3);
 
-  console.log(
-    gameState,
-    STATES.X_TURN,
-    getBitCount(arr[1]),
-    ALL_ROW_MOVES & arr[1]
-  );
-
   if (
     gameState === STATES.X_TURN &&
     getBitCount(arr[1]) === 1 &&
     ALL_ROW_MOVES & arr[1]
   ) {
     const move = ROW_MOVES[ROW_MOVES.length - 1 - ROW_MOVES.indexOf(arr[1])];
-    console.log(move);
     if ((move & boardState) === 0) return move;
   }
 
   if (
     (ALL_ROW_MOVES & arr[1]) === arr[1] &&
-    gameState === STATES.O_MOVE &&
+    gameState === STATES.O_TURN &&
     getBitCount(arr[1]) === 2
   ) {
     const cornerMove = ROW_TO_CORNER[arr[1]];
@@ -273,23 +264,24 @@ const makeMove = (state) => {
       return cornerMove;
     }
   }
+
+
   if (
-    gameState === STATES.O_MOVE &&
+    gameState === STATES.O_TURN &&
     getBitCount(arr[1]) === 2 &&
-    ALL_ROW_MOVES & arr[1] &&
-    ALL_CORNER_MOVES & arr[1]
+    (ALL_ROW_MOVES & arr[1]) &&
+    (ALL_CORNER_MOVES & arr[1])
   ) {
     if (
       ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1]) <=
       CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
     ) {
-      const move =
-        CORNER_MOVES[
-          CORNER_MOVES.length -
-            1 -
-            CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
-        ];
-      if ((move & boardState) === 0) return move;
+      let move = CORNER_MOVES[ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1])];
+      if ((move & boardState) !== 0) {
+          move = CORNER_MOVES[CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1]) - 1];
+      } 
+      
+      if (move != null && (move & boardState) === 0) return move;
     }
   }
 
@@ -297,16 +289,11 @@ const makeMove = (state) => {
     possibleNotEnemy = [],
     possibleNotWins = [],
     filteredWinningMoves = winningMoves,
-    filteredEnemyMoves = enemyMoves,
-    res = null;
+    filteredEnemyMoves = enemyMoves;
 
-  for (;;) {
-    filteredWinningMoves = filteredWinningMoves.filter(
-      (diff) => getBitCount(diff) < diffBitLimit
-    );
-    filteredEnemyMoves = enemyMoves.filter(
-      (diff) => getBitCount(diff) < diffBitLimit
-    );
+  for (; !possibleNotEnemy.length && !possibleNotWins.length && diffBitLimit; diffBitLimit--) {
+    filteredWinningMoves = filteredWinningMoves.filter((diff) => getBitCount(diff) < diffBitLimit);
+    filteredEnemyMoves = enemyMoves.filter((diff) => getBitCount(diff) < diffBitLimit);
     const allEnemyMoves = reduceBitArray(filteredEnemyMoves);
     const allWinningMoves = reduceBitArray(filteredWinningMoves);
 
@@ -324,22 +311,13 @@ const makeMove = (state) => {
       }
       b >>= 1;
     }
-
-    if (!res && !possibleNotEnemy.length && !possibleNotWins.length) {
-      diffBitLimit--;
-    } else {
-      break;
-    }
   }
 
-  return (
-    res ||
-    makeMoveWithGreaterDiff(
+  return makeMoveWithGreaterDiff(
       possibleNotEnemy.concat(possibleNotWins),
       winningMoves,
       enemyMoves
-    )
-  );
+    );
 };
 
 class Game {
