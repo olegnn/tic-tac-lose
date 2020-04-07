@@ -58,11 +58,15 @@ class Message {
     ];
   }
 
-  show(state) {
-    this.element.innerText = this.messages[state.getGameState()];
+  showState(state) {
+    this.setMessage(this.messages[state.getGameState()]);
   }
 
-  render(element) {
+  setMessage(message) {
+    this.element.innerText = message;
+  }
+
+  appendTo(element) {
     element.appendChild(this.element);
   }
 }
@@ -141,7 +145,7 @@ class Field {
     }
   }
 
-  render(element) {
+  appendTo(element) {
     element.appendChild(this.table);
   }
 }
@@ -176,11 +180,9 @@ const getLastBit = (value) => {
 };
 
 const isDraw = (state) =>
-  // console.log("STATE:", state.getBoardState().toString(2)) ||
   state.getBoardState() === 0x1ff ||
   (!getWinningMoves(state.getOPlayer(), state.getXPlayer()).length &&
     !getWinningMoves(state.getXPlayer(), state.getOPlayer()).length);
-const to2 = (value) => value.toString(2);
 
 //const logMove = ({ diff, win }) =>
 // console.log(`WIN: ${to2(win)}; DIFF: ${to2(diff)}`);
@@ -192,7 +194,8 @@ const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
     res = null;
 
   // console.log("PPPP", moves);
-  for (const move of moves) {
+  for (let i = 0; i < moves.length; i++) {
+    const move = moves[i];
     const winDiff = winDiffs.reduce(
       (acc, diff) => (diff & move ? Math.min(acc, getBitCount(diff)) : acc),
       3
@@ -205,23 +208,17 @@ const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
     const enemyLens = enemyDiffs.filter(
       (diff) => diff & move && getBitCount(diff) === enemyDiff
     ).length;
+
+    // const to2 = (value) => value.toString(2);
     // console.log("MMMM: ", to2(move), winDiff, enemyDiff, enemyLens);
 
     if (winDiff >= maxWinDiff || maxWinDiff === 1) {
       if (enemyDiff >= maxEnemyDiff || maxWinDiff === 1) {
-        // console.log(res, CORNER_MOVES.includes(res));
         if (
           enemyDiff > maxEnemyDiff ||
           enemyLens <= minEnemyLens ||
           maxWinDiff === 1
         ) {
-          /*console.log(res, CORNER_MOVES.includes(res));
-          if (winDiff === maxWinDiff && enemyDiff === maxEnemyDiff && enemyLens === minEnemyLens) {
-                
-                if (CORNER_MOVES.includes(res)) {
-                    continue;
-                }
-            }*/
           maxWinDiff = winDiff;
           maxEnemyDiff = enemyDiff;
           minEnemyLens = enemyLens;
@@ -241,7 +238,7 @@ const makeMove = (state) => {
   const boardState = state.getBoardState();
   const arr = [xState, oState];
 
-  if (!boardState) return 0b100000000;
+  if (!boardState) return 0b010000000;
 
   if (gameState === STATES.O_TURN) {
     arr.reverse();
@@ -254,12 +251,50 @@ const makeMove = (state) => {
     .map(({ diff }) => diff)
     .filter((diff) => getBitCount(diff) < 3);
 
-  //console.log(gameState === STATES.X_TURN, arr[1]);
-  if ((ALL_ROW_MOVES & arr[1]) === arr[1]) {
-    // console.log("HELLo");
+  console.log(
+    gameState,
+    STATES.X_TURN,
+    getBitCount(arr[1]),
+    ALL_ROW_MOVES & arr[1]
+  );
+
+  if (
+    gameState === STATES.X_TURN &&
+    getBitCount(arr[1]) === 1 &&
+    ALL_ROW_MOVES & arr[1]
+  ) {
+    const move = ROW_MOVES[ROW_MOVES.length - 1 - ROW_MOVES.indexOf(arr[1])];
+    console.log(move);
+    if ((move & boardState) === 0) return move;
+  }
+
+  if (
+    (ALL_ROW_MOVES & arr[1]) === arr[1] &&
+    gameState === STATES.O_MOVE &&
+    getBitCount(arr[1]) === 2
+  ) {
     const cornerMove = ROW_TO_CORNER[arr[1]];
     if (cornerMove) {
       return cornerMove;
+    }
+  }
+  if (
+    gameState === STATES.O_MOVE &&
+    getBitCount(arr[1]) === 2 &&
+    ALL_ROW_MOVES & arr[1] &&
+    ALL_CORNER_MOVES & arr[1]
+  ) {
+    if (
+      ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1]) <=
+      CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
+    ) {
+      const move =
+        CORNER_MOVES[
+          CORNER_MOVES.length -
+            1 -
+            CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
+        ];
+      if ((move & boardState) === 0) return move;
     }
   }
 
@@ -271,7 +306,7 @@ const makeMove = (state) => {
     res = null;
 
   for (;;) {
-    filteredWinningMoves = winningMoves.filter(
+    filteredWinningMoves = filteredWinningMoves.filter(
       (diff) => getBitCount(diff) < diffBitLimit
     );
     filteredEnemyMoves = enemyMoves.filter(
@@ -286,15 +321,10 @@ const makeMove = (state) => {
       if ((boardState & b) === 0) {
         const notEnemyWin = (allEnemyMoves & b) === 0;
         const notWinMove = (allWinningMoves & b) === 0;
-        /*if (notEnemyWin && notWinMove) {
-          res = b;
-          break;
-        }*/
 
         if (notEnemyWin) {
           possibleNotEnemy.push(b);
-        }
-        if (notWinMove) {
+        } else if (notWinMove) {
           possibleNotWins.push(b);
         }
       }
@@ -319,24 +349,36 @@ const makeMove = (state) => {
 };
 
 class Game {
-  constructor(players, delay = 500) {
+  constructor(players, headerMessage = "", delay = 500) {
+    const invalidPlayer = players.find((v) => v !== 0 && v !== 1);
+    if (invalidPlayer) throw new Error(`Unknown player: ${invalidPlayer}`);
     this.state = new State();
     this.field = new Field((move) => this.nextMove(move));
     this.message = new Message();
+    this.header = new Message();
+    this.headerMessage = headerMessage;
     this.delay = delay;
 
     this.players = players;
   }
 
-  render(element) {
+  appendTo(element) {
     const div = document.createElement("div");
-    this.message.render(div);
-    this.field.render(div);
+    this.header.appendTo(div);
+    this.message.appendTo(div);
+    this.field.appendTo(div);
+    this.header.setMessage(
+      this.players.length
+        ? `Computer plays as player ${this.players.map(
+            (player) => (player === 0 ? "X" : "O")
+          )}.${this.headerMessage ? ` ${this.headerMessage}` : ""}`
+        : this.headerMessage
+    );
     element.appendChild(div);
   }
 
   start() {
-    this.message.show(this.state);
+    this.message.showState(this.state);
     if (this.players.includes(this.state.getGameState())) {
       this.playNextMove();
     }
@@ -382,7 +424,7 @@ class Game {
           }
         }, 0 && this.delay);
       }
-      this.message.show(this.state);
+      this.message.showState(this.state);
     }
   }
 
@@ -395,9 +437,18 @@ class Game {
 }
 
 window.onload = () => {
+  /*for (let i = 10; i > -1; i--) {
+        const game = new Game([0, 1]);
+        game.appendTo(document.body);
+        game.start();
+      }*/
+  const messages = [
+    "Always loses to player.",
+    "Most of times loses to player.",
+  ];
   for (let i = 1; i > -1; i--) {
-    const game = new Game([i]);
-    game.render(document.body);
+    const game = new Game([i], messages[1 - i]);
+    game.appendTo(document.body);
     game.start();
   }
 };
