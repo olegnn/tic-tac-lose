@@ -425,7 +425,7 @@ class Game {
 
 window.onload = () => {
   const messages = [
-    "Always loses to player.",
+    "Always loses to the player.",
     "Most of times loses to the player.",
   ];
   for (let i = 1; i > -1; i--) {
