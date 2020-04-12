@@ -275,25 +275,6 @@ const makeMove = state => {
         return cornerMove;
       }
     }
-
-    if (
-      ALL_ROW_MOVES & arr[1] &&
-      ALL_CORNER_MOVES & arr[1] &&
-      getBitCount(arr[1]) === 2
-    ) {
-      if (
-        ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1]) <=
-        CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
-      ) {
-        let move = CORNER_MOVES[ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1])];
-        if ((move & boardState) !== 0) {
-          move =
-            CORNER_MOVES[CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1]) - 1];
-        }
-
-        if (move != null && (move & boardState) === 0) return move;
-      }
-    }
   }
 
   let possibleNotEnemy = [],
