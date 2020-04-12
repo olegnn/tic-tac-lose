@@ -3,7 +3,7 @@ const STATES = {
   O_TURN: 1,
   X_WIN: 2,
   O_WIN: 3,
-  DRAW: 4,
+  DRAW: 4
 };
 
 const WIN_POS = [
@@ -14,49 +14,52 @@ const WIN_POS = [
   0b010010010,
   0b001001001,
   0b100010001,
-  0b001010100,
+  0b001010100
 ];
 
 const CORNER_MOVES = [256, 64, 4, 1];
 
 const ROW_MOVES = [128, 32, 8, 2];
 
+const BASE_STATE = 0b111111111;
+
 const ROW_TO_CORNER = {
   [ROW_MOVES[0] | ROW_MOVES[1]]: CORNER_MOVES[0],
   [ROW_MOVES[0] | ROW_MOVES[2]]: CORNER_MOVES[1],
   [ROW_MOVES[3] | ROW_MOVES[1]]: CORNER_MOVES[2],
-  [ROW_MOVES[3] | ROW_MOVES[2]]: CORNER_MOVES[3],
+  [ROW_MOVES[3] | ROW_MOVES[2]]: CORNER_MOVES[3]
 };
 
-const BASE_STATE = 0b111111111;
-
-const applyValueWithBitMask = (value, newValue, mask) => {
-  return (value & ~mask) | newValue;
-};
-
-const reduceBitArray = (arr) => arr.reduce((acc, diff) => acc | diff, 0);
+const reduceBitArray = arr => arr.reduce((acc, diff) => acc | diff, 0);
 
 const ALL_CORNER_MOVES = reduceBitArray(CORNER_MOVES);
 
 const ALL_ROW_MOVES = reduceBitArray(ROW_MOVES);
 
+const applyValueWithBitMask = (value, newValue, mask) =>
+  (value & ~mask) | newValue;
+
+const getBitCount = value => {
+  let res = 0;
+  while (value) {
+    res += value & 1;
+    value >>= 1;
+  }
+
+  return res;
+};
+
 class Message {
-  constructor() {
+  constructor(messages) {
     this.element = document.createElement("p");
-    this.messages = [
-      "X player's turn",
-      "O player's turn",
-      "X is a winner",
-      "O is a winner",
-      "Draw",
-    ];
+    this.messages = [].concat(messages);
   }
 
-  showState(state) {
-    this.setMessage(this.messages[state.getGameState()]);
+  showMessage(index = 0) {
+    this.setInnerText(this.messages[index]);
   }
 
-  setMessage(message) {
+  setInnerText(message) {
     this.element.innerText = message;
   }
 
@@ -81,11 +84,15 @@ class State {
   }
 
   getGameState() {
-    return (this.value & (0b111 << 18)) >> 18;
+    return (this.value >> 18) & 0b111;
   }
 
-  setOplayer(state) {
+  setOPlayer(state) {
     this.value = applyValueWithBitMask(this.value, state << 9, BASE_STATE << 9);
+  }
+
+  getOPlayer() {
+    return (this.value >> 9) & BASE_STATE;
   }
 
   setXPlayer(state) {
@@ -94,10 +101,6 @@ class State {
 
   getXPlayer(state) {
     return this.value & BASE_STATE;
-  }
-
-  getOPlayer() {
-    return (this.value & (BASE_STATE << 9)) >> 9;
   }
 
   getBoardState() {
@@ -136,7 +139,7 @@ class Field {
 
   clearTable() {
     for (let i = 0; i < 9; i++) {
-      const cell = table.children[(i / 3) | 0][i % 3];
+      const cell = this.table.children[(i / 3) | 0].children[i % 3];
       cell.innerText = " ";
     }
   }
@@ -146,48 +149,26 @@ class Field {
   }
 }
 
-const getBitCount = (value) => {
-  let res = 0;
-  while (value) {
-    res += value & 1;
-    value >>= 1;
-  }
-  return res;
-};
-
 const getWinningMoves = (stateA, stateB) =>
-  WIN_POS.map((pos) => {
-    const diff = (pos & stateA) ^ pos;
-    return { win: pos, diff };
-    return { win: pos, diff };
-  })
-    .filter(({ diff, win }) => (stateA & diff) === 0 && (stateB & win) === 0)
-    .sort((a, b) => (getBitCount(a.diff) > getBitCount(b.diff) ? 1 : -1));
+  WIN_POS.map(win => ({ win: win, diff: (win & stateA) ^ win })).filter(
+    ({ diff, win }) => (stateA & diff) === 0 && (stateB & win) === 0
+  );
 
-const isWinner = (state) => WIN_POS.find((v) => (v & state) === v) !== void 0;
+const isWinner = stateVal => WIN_POS.some(v => (v & stateVal) === v);
 
-const getLastBit = (value) => {
-  let i = 0;
-  while ((value & 1) === 0) {
-    i++;
-  }
-
-  return 1 << i;
-};
-
-const isDraw = (state) =>
+const isDraw = state =>
   state.getBoardState() === 0x1ff ||
   (!getWinningMoves(state.getOPlayer(), state.getXPlayer()).length &&
     !getWinningMoves(state.getXPlayer(), state.getOPlayer()).length);
 
-const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
+const chooseMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
   let maxWinDiff = -Infinity,
     maxEnemyDiff = -Infinity,
     minEnemyLens = Infinity,
+    minWinLens = Infinity,
     res = null;
 
-  for (let i = 0; i < moves.length; i++) {
-    const move = moves[i];
+  for (const move of moves) {
     const winDiff = winDiffs.reduce(
       (acc, diff) => (diff & move ? Math.min(acc, getBitCount(diff)) : acc),
       3
@@ -197,24 +178,31 @@ const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
       3
     );
 
-    const enemyLens = enemyDiffs.filter(
-      (diff) => diff & move && getBitCount(diff) === enemyDiff
+    const winLens = winDiffs.filter(
+      diff => diff & move && getBitCount(diff) === winDiff
     ).length;
 
-    //// const to2 = (value) => value.toString(2);
-    /// console.log("MOVE: ", to2(move), winDiff, enemyDiff, enemyLens);
+    const enemyLens = enemyDiffs.filter(
+      diff => diff & move && getBitCount(diff) === enemyDiff
+    ).length;
+
+    // const to2 = value => value.toString(2);
+    // console.log("MOVE: ", to2(move), winDiff, winLens, enemyDiff, enemyLens);
 
     if (winDiff >= maxWinDiff || maxWinDiff === 1) {
-      if (enemyDiff >= maxEnemyDiff || maxWinDiff === 1) {
-        if (
-          enemyDiff > maxEnemyDiff ||
-          enemyLens <= minEnemyLens ||
-          maxWinDiff === 1
-        ) {
-          maxWinDiff = winDiff;
-          maxEnemyDiff = enemyDiff;
-          minEnemyLens = enemyLens;
-          res = move;
+      if (winLens <= minWinLens || winDiff > maxWinDiff || maxWinDiff === 1) {
+        if (enemyDiff >= maxEnemyDiff || maxWinDiff === 1) {
+          if (
+            enemyDiff > maxEnemyDiff ||
+            enemyLens <= minEnemyLens ||
+            maxWinDiff === 1
+          ) {
+            maxWinDiff = winDiff;
+            maxEnemyDiff = enemyDiff;
+            minEnemyLens = enemyLens;
+            minWinLens = winLens;
+            res = move;
+          }
         }
       }
     }
@@ -223,7 +211,7 @@ const makeMoveWithGreaterDiff = (moves, winDiffs, enemyDiffs) => {
   return res;
 };
 
-const makeMove = (state) => {
+const makeMove = state => {
   const gameState = state.getGameState();
   const xState = state.getXPlayer();
   const oState = state.getOPlayer();
@@ -236,64 +224,79 @@ const makeMove = (state) => {
     arr.reverse();
   }
 
+  const movesLeft = Math.round(getBitCount(~boardState & BASE_STATE) / 2);
+  const enemyMovesLeft = getBitCount(~boardState & BASE_STATE) >> 1;
+  let diffBitLimit = 3;
+
   let winningMoves = getWinningMoves(...arr)
     .map(({ diff }) => diff)
-    .filter((diff) => getBitCount(diff) < 3);
+    .filter(diff => {
+      const count = getBitCount(diff);
+      return count < diffBitLimit && count <= movesLeft;
+    });
   let enemyMoves = getWinningMoves(...[...arr].reverse())
     .map(({ diff }) => diff)
-    .filter((diff) => getBitCount(diff) < 3);
+    .filter(diff => {
+      const count = getBitCount(diff);
+      return count < diffBitLimit && count <= enemyMovesLeft;
+    });
 
-  if (
-    gameState === STATES.X_TURN &&
-    getBitCount(arr[1]) === 1 &&
-    ALL_ROW_MOVES & arr[1]
-  ) {
-    const move = ROW_MOVES[ROW_MOVES.length - 1 - ROW_MOVES.indexOf(arr[1])];
-    if ((move & boardState) === 0) return move;
-  }
-
-  if (
-    (ALL_ROW_MOVES & arr[1]) === arr[1] &&
-    gameState === STATES.O_TURN &&
-    getBitCount(arr[1]) === 2
-  ) {
-    const cornerMove = ROW_TO_CORNER[arr[1]];
-    if (cornerMove) {
-      return cornerMove;
+  if (gameState === STATES.X_TURN) {
+    if (ALL_ROW_MOVES & arr[1] && getBitCount(arr[1]) === 1) {
+      const move = ROW_MOVES[ROW_MOVES.length - 1 - ROW_MOVES.indexOf(arr[1])];
+      if ((move & boardState) === 0) return move;
     }
-  }
 
-  if (
-    gameState === STATES.X_TURN &&
-    ((ALL_CORNER_MOVES & arr[1]) === arr[1])
-    && (ALL_CORNER_MOVES & arr[0]) === 0
-  ) {
-      const cornerMove = CORNER_MOVES.find(v => (v & boardState) === 0);
-      if (cornerMove != null && (cornerMove & boardState) === 0) return cornerMove;
-  }
-
-  if (
-    gameState === STATES.O_TURN &&
-    getBitCount(arr[1]) === 2 &&
-    ALL_ROW_MOVES & arr[1] &&
-    ALL_CORNER_MOVES & arr[1]
-  ) {
     if (
-      ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1]) <=
-      CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
+      (ALL_CORNER_MOVES & arr[1]) === arr[1] &&
+      (ALL_CORNER_MOVES & arr[0]) === 0
     ) {
-      let move = CORNER_MOVES[ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1])];
-      if ((move & boardState) !== 0) {
-        move =
-          CORNER_MOVES[CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1]) - 1];
+      const cornerMove = CORNER_MOVES.find(v => (v & boardState) === 0);
+      if (cornerMove != null && (cornerMove & boardState) === 0)
+        return cornerMove;
+    }
+  } else {
+    if (ALL_ROW_MOVES & arr[1] && getBitCount(arr[1]) === 1) {
+      const rowIndex = ROW_MOVES.indexOf(arr[1]);
+      if (rowIndex < 1 || rowIndex > 2) {
+        return CORNER_MOVES[CORNER_MOVES.length - 1 - rowIndex];
+      } else {
+        return CORNER_MOVES[2 - rowIndex];
       }
+    }
 
-      if (move != null && (move & boardState) === 0) return move;
+    if ((ALL_ROW_MOVES & arr[1]) === arr[1] && getBitCount(arr[1]) === 2) {
+      const cornerMove = ROW_TO_CORNER[arr[1]];
+      if (
+        cornerMove != null &&
+        (cornerMove & boardState) === 0 &&
+        !WIN_POS.some(v => getBitCount(v & (arr[0] | cornerMove)) === 2)
+      ) {
+        return cornerMove;
+      }
+    }
+
+    if (
+      ALL_ROW_MOVES & arr[1] &&
+      ALL_CORNER_MOVES & arr[1] &&
+      getBitCount(arr[1]) === 2
+    ) {
+      if (
+        ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1]) <=
+        CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1])
+      ) {
+        let move = CORNER_MOVES[ROW_MOVES.indexOf(ALL_ROW_MOVES & arr[1])];
+        if ((move & boardState) !== 0) {
+          move =
+            CORNER_MOVES[CORNER_MOVES.indexOf(ALL_CORNER_MOVES & arr[1]) - 1];
+        }
+
+        if (move != null && (move & boardState) === 0) return move;
+      }
     }
   }
 
-  let diffBitLimit = 3,
-    possibleNotEnemy = [],
+  let possibleNotEnemy = [],
     possibleNotWins = [],
     filteredWinningMoves = winningMoves,
     filteredEnemyMoves = enemyMoves;
@@ -303,12 +306,6 @@ const makeMove = (state) => {
     !possibleNotEnemy.length && !possibleNotWins.length && diffBitLimit;
     diffBitLimit--
   ) {
-    filteredWinningMoves = filteredWinningMoves.filter(
-      (diff) => getBitCount(diff) < diffBitLimit
-    );
-    filteredEnemyMoves = enemyMoves.filter(
-      (diff) => getBitCount(diff) < diffBitLimit
-    );
     const allEnemyMoves = reduceBitArray(filteredEnemyMoves);
     const allWinningMoves = reduceBitArray(filteredWinningMoves);
 
@@ -326,9 +323,16 @@ const makeMove = (state) => {
       }
       b >>= 1;
     }
+
+    filteredWinningMoves = filteredWinningMoves.filter(
+      diff => getBitCount(diff) < diffBitLimit
+    );
+    filteredEnemyMoves = enemyMoves.filter(
+      diff => getBitCount(diff) < diffBitLimit
+    );
   }
 
-  return makeMoveWithGreaterDiff(
+  return chooseMoveWithGreaterDiff(
     possibleNotEnemy.concat(possibleNotWins),
     winningMoves,
     enemyMoves
@@ -336,16 +340,33 @@ const makeMove = (state) => {
 };
 
 class Game {
-  constructor(players, headerMessage = "", delay = 500) {
-    const invalidPlayer = players.find((v) => v !== 0 && v !== 1);
-    if (invalidPlayer) throw new Error(`Unknown player: ${invalidPlayer}`);
+  constructor(players, headerMessages = [], delay = 500) {
+    players.forEach(v => {
+      if (v !== 0 && v !== 1)
+        throw new Error(`Unknown player: ${invalidPlayer}`);
+    });
     this.state = new State();
-    this.field = new Field((move) => this.nextMove(move));
-    this.message = new Message();
-    this.header = new Message();
-    this.headerMessage = headerMessage;
+    this.field = new Field(move => this.nextMove(move));
+    this.message = new Message([
+      "X player's turn",
+      "O player's turn",
+      "X is a winner",
+      "O is a winner",
+      "Draw"
+    ]);
+    this.header = new Message(
+      []
+        .concat(headerMessages)
+        .map(
+          headerMessage =>
+            players.length
+              ? `Computer plays as a player ${players.map(
+                  player => (player === 0 ? "X" : "O")
+                )}.${headerMessage ? ` ${headerMessage}` : ""}`
+              : headerMessage
+        )
+    );
     this.delay = delay;
-
     this.players = players;
   }
 
@@ -354,18 +375,12 @@ class Game {
     this.header.appendTo(div);
     this.message.appendTo(div);
     this.field.appendTo(div);
-    this.header.setMessage(
-      this.players.length
-        ? `Computer plays as a player ${this.players.map(
-            (player) => (player === 0 ? "X" : "O")
-          )}.${this.headerMessage ? ` ${this.headerMessage}` : ""}`
-        : this.headerMessage
-    );
+    this.header.showMessage();
     element.appendChild(div);
   }
 
   start() {
-    this.message.showState(this.state);
+    this.message.showMessage(this.state.getGameState());
     if (this.players.includes(this.state.getGameState())) {
       this.playNextMove();
     }
@@ -385,9 +400,9 @@ class Game {
 
   nextMove({ val, arr }) {
     if (this.state.getGameState() >= STATES.X_WIN) return;
-    const playerState = this.state.getBoardState();
+    const boardState = this.state.getBoardState();
     const moveBit = val != null ? val : (0x100 >> (arr[0] * 3)) >> arr[1];
-    if (playerState & moveBit) {
+    if (boardState & moveBit) {
       return;
     } else {
       const prevX = this.state.getXPlayer(),
@@ -397,7 +412,7 @@ class Game {
           this.state.setXPlayer(this.state.getXPlayer() | moveBit);
           break;
         case STATES.O_TURN:
-          this.state.setOplayer(this.state.getOPlayer() | moveBit);
+          this.state.setOPlayer(this.state.getOPlayer() | moveBit);
       }
       this.checkState();
       this.field.fillTable(
@@ -409,9 +424,9 @@ class Game {
           if (this.players.includes(this.state.getGameState())) {
             this.playNextMove();
           }
-        }, 0 && this.delay);
+        }, this.delay);
       }
-      this.message.showState(this.state);
+      this.message.showMessage(this.state.getGameState());
     }
   }
 
@@ -426,10 +441,10 @@ class Game {
 window.onload = () => {
   const messages = [
     "Always loses to the player.",
-    "Most of times loses to the player.",
+    "Most of times loses to the player."
   ];
   for (let i = 1; i > -1; i--) {
-    const game = new Game([i], messages[1 - i]);
+    const game = new Game([i], messages[1 - i], 0);
     game.appendTo(document.body);
     game.start();
   }
